@@ -1,0 +1,513 @@
+options validvarname=v7;
+
+proc import datafile="/home/u44080474/C772/Mortality/MortalityRate.csv" 
+		out=morta.mortalityrateus dbms=csv replace;
+	guessingrows=5000;
+	datarow=2;
+	getnames=yes;
+run;
+
+data morta.statesmortalityrates (where=(statecode<=56) keep=location Statecode 
+		category Mortality_Rate__1980_ mortality_rate__2014_ 
+		__change_in_mortality_rate__198 state differenceinmortality statecode 
+		rename=__change_in_mortality_rate__198=ChangeinmortalitryRate1980_2014);
+	set morta.mortalityrateus;
+	State=scan(location, -1, ",");
+	County=scan(location, -2, ",");
+	Differenceinmortality=Mortality_Rate__1980_ - mortality_rate__2014_;
+	Statecode=input(FIPS, 7.);
+
+	if FIPS='nan' then
+		statecode=0;
+	else
+		statecode=statecode;
+run;
+
+proc means data=morta.statesmortalityrates;
+run;
+
+proc summary data=morta.sortedmortalityrate;
+run;
+proc print;
+run;
+
+proc contents data=morta.statesmortalityrates;
+run;
+
+proc print data=morta.statesmortalityrates (obs=10);
+run;
+
+data morta.USAmortalityrates (keep=location Statecode category 
+		Mortality_Rate__1980_ mortality_rate__2014_ __change_in_mortality_rate__198 
+		state differenceinmortality county statecode 
+		rename=__change_in_mortality_rate__198=ChangeinmortalitryRate1980_2014);
+	set morta.mortalityrateus;
+	State=scan(location, -1, ",");
+	County=scan(location, -2, ",");
+	Differenceinmortality=Mortality_Rate__1980_ - mortality_rate__2014_;
+	Statecode=input(FIPS, 7.);
+
+	if FIPS='nan' then
+		statecode=0;
+	else
+		statecode=statecode;
+run;
+
+proc print data=morta.usamortalityrates (obs=10);
+run;
+
+proc format;
+	value nm .='.' other='X';
+	value $ch ' '='.'other='X';
+run;
+
+proc freq data=morta.statesmortalityrates;
+	table statecode*(_all_) / list missing nocum;
+	format _numeric_ nm. _character_ $ch.;
+run;
+
+proc sort data=morta.USAmortalityrates out=morta.sortedmortalityrate;
+	by category;
+run;
+
+proc surveyselect data=morta.sortedmortalityrate out=morta.samplemorta 
+(drop=total allocproportion samplesize actualproportion selectionprob 
+		samplingweight) method=srs sampsize=7000;
+	strata category / alloc=proportional;
+run;
+
+proc sort data=morta.USAmortalityrates out=morta.sortedmortalityrate2;
+	by state;
+run;
+
+proc surveyselect data=morta.sortedmortalityrate2 out=morta.samplemorta2 
+(drop=total allocproportion samplesize actualproportion selectionprob 
+		samplingweight) method=srs sampsize=7000;
+	strata state / alloc=proportional;
+run;
+
+proc surveyselect data=morta.sortedmortalityrate out=morta.samplemorta 
+(drop=total allocproportion samplesize actualproportion selectionprob 
+		samplingweight) method=srs samprate=0.11;
+	strata category / alloc=proportional;
+run;
+
+proc freq data=morta.samplemorta;
+	tables category*state;
+run;
+
+proc freq data=morta.statesmortalityrates;
+	tables state category;
+run;
+
+ods graphics on;
+
+proc corr data=morta.samplemorta plots=scatter plots(maxpoints=none);
+run;
+
+ods graphics off;
+ods graphics on / width=9in;
+
+proc corresp data=morta.statesmortalityrates out=morta.Results short  chi2p;
+	var ChangeinmortalitryRate1980_2014 Mortality_Rate__1980_ mortality_rate__2014_ ;
+	id state;
+run;
+
+ods graphics off;
+title "Change in mortality rate between 1980 and 2014";
+ods graphics on / width=8in;
+
+proc corresp data=morta.samplemorta out=morta.Results short  chi2p;
+	var ChangeinmortalitryRate1980_2014 Mortality_Rate__1980_ mortality_rate__2014_ ;
+	id category;
+run;
+
+ods graphics off;
+
+ods graphics on;
+
+proc corresp data=morta.statesmortalityrates  mca short dimens=2 mca gre short plots=all out=morta.Results all;;
+	tables ChangeinmortalitryRate1980_2014 category state;
+
+run;
+
+ods graphics off;
+
+proc means data=morta.statesmortalityrates mean max maxdec=2;
+	var ChangeinmortalitryRate1980_2014;
+	class category;
+	output out=morta.statesrankedmorta mean=highmortality;
+	ways 1;
+run;
+
+proc sort data=morta.statesrankedmorta out=morta.stateshighmortalityrates;
+	by descending highmortality;
+run;
+
+proc print data=morta.stateshighmortalityrates (obs=10);
+run;
+
+proc means data=morta.usamortalityrates n mean max maxdec=2;
+	var ChangeinmortalitryRate1980_2014;
+	class state;
+	output out=morta.usarankedmorta2 max=highmortality;
+	ways 1;
+run;
+
+proc sort data=morta.usarankedmorta2 out=morta.usahighmortalityrates;
+	by descending highmortality;
+run;
+
+proc print data=morta.usahighmortalityrates;
+run;
+
+ods graphics on / width=9in;
+ods listing style=analysis;
+
+proc sgpanel data=morta.statesmortalityrates noautolegend;
+	panelby category / layout=columnlattice novarname;
+	vbar state / response=ChangeinmortalitryRate1980_2014 group=state;
+	rowaxis grid;
+run;
+
+ods graphics off;
+ods graphics on / width=9in;
+ods listing style=analysis;
+
+proc sgpanel data=morta.statesmortalityrates noautolegend;
+	panelby state / layout=columnlattice novarname;
+	vbar category / response=ChangeinmortalitryRate1980_2014 group=category;
+	rowaxis grid;
+run;
+
+ods graphics off;
+ods graphics on / width=9in;
+ods listing style=analysis;
+
+proc sgpanel data=morta.statesmortalityrates noautolegend;
+	panelby location / layout=columnlattice novarname;
+	vbar category / response=ChangeinmortalitryRate1980_2014 group=state;
+	rowaxis grid;
+run;
+
+ods graphics off;
+ods graphics on / width=9in;
+
+proc gplot data=morta.statesmortalityrates;
+	plot ChangeinmortalitryRate1980_2014 * state;
+	run;
+quit;
+
+ods graphics off;
+
+proc univariate data=morta.statesmortalityrates;
+	histogram differenceinmortality ChangeinmortalitryRate1980_2014 
+		Mortality_Rate__1980_ mortality_rate__2014_;
+run;
+
+proc univariate data=morta.samplemorta;
+	histogram differenceinmortality ChangeinmortalitryRate1980_2014 
+		Mortality_Rate__1980_ mortality_rate__2014_;
+run;
+
+proc univariate data=morta.statesmortalityrates;
+	histogram ChangeinmortalitryRate1980_2014;
+run;
+
+proc glmselect data=MORTA.samplemorta;
+	class location;
+	model ChangeinmortalitryRate1980_2014=statecode location;
+run;
+
+ods graphics on / width=11in;
+
+proc sgplot data=morta.statesmortalityrates;
+	yaxis label="Mortality Rate";
+	vbar location / response=mortality_rate__2014_;
+	vbar location / response=Mortality_Rate__1980_ barwidth=0.5 transparency=0.8;
+	vbar location / response=ChangeinmortalitryRate1980_2014 barwidth=0.3 
+		transparency=0.4;
+run;
+
+ods graphics off;
+
+proc sgplot data=morta.mortalityrateusa;
+	vline location / response=ChangeinmortalitryRate1980_2014;
+run;
+
+proc sgplot data=morta.mortalityrateusa;
+	vline category / response=ChangeinmortalitryRate1980_2014;
+run;
+
+proc sgplot data=morta.mortalityrateusa;
+	yaxis label="category";
+	vbar location / response=ChangeinmortalitryRate1980_2014 barwidth=0.5 
+		transparency=0.8;
+run;
+
+proc sgplot data=morta.mortalityrateusa;
+	heatmap y=ChangeinmortalitryRate1980_2014 x=location;
+run;
+
+ods graphics on discretemax=3, 200;
+
+proc sgplot data=morta.mortalityrateusa;
+	scatter y=Category x=location;
+run;
+
+ods graphics off;
+ods graphics on;
+
+proc npar1way data=morta.samplemorta plots(only)=wilcoxonboxplot;
+	class location;
+	var ChangeinmortalitryRate1980_2014;
+run;
+
+ods graphics off;
+ods graphics on;
+
+proc npar1way data=morta.mortalityrateusa plots(only)=wilcoxonboxplot;
+	class location;
+	var ChangeinmortalitryRate1980_2014;
+	output out=morta.mortawilc;
+run;
+
+ods graphics off;
+ods graphics on;
+
+proc npar1way data=morta.mortalityrateusa wilcoxon plots(only)=all;
+	class category;
+	var ChangeinmortalitryRate1980_2014 Mortality_Rate__1980_ 
+		mortality_rate__2014_;
+	exact wilcoxon;
+run;
+
+ods graphics off;
+
+proc corr data=morta.usamortalityrates pearson spearman hoeffding;
+	var ChangeinmortalitryRate1980_2014 statecode Mortality_Rate__1980_ 
+		mortality_rate__2014_;
+run;
+
+proc glm data=morta.mortalityrateusa plots=all;
+	class category location;
+	model ChangeinmortalitryRate1980_2014=location category / solution;
+	run;
+
+proc glm data=morta.mortalityrateusa plots=all;
+	class location;
+	model ChangeinmortalitryRate1980_2014=location / solution;
+	run;
+
+proc sort data=morta.statesmortalityrates out=morta.statesrankedbystate;
+	by descending ChangeinmortalitryRate1980_2014 location;
+run;
+
+proc print data=morta.statesrankedbystate (obs=10);
+run;
+
+ods graphics on / width=9in;
+
+proc sgplot data=morta.statesrankedbystate;
+	vline state / response=ChangeinmortalitryRate1980_2014;
+	vline state / response=Mortality_Rate__1980_;
+	vline state / response=mortality_rate__2014_;
+run;
+
+ods graphics off;
+ods graphics on / width=9in;
+
+proc sgplot data=morta.usarankedbystate;
+	vline state / response=Mortality_Rate__1980_;
+run;
+
+ods graphics off;
+ods graphics on / width=11in;
+
+proc sgplot data=morta.usarankedbystate;
+	vline state / response=ChangeinmortalitryRate1980_2014;
+	vline state / response=Mortality_Rate__1980_;
+	vline state / response=mortality_rate__2014_;
+run;
+
+ods graphics off;
+
+proc sort data=morta.usamortalityrates out=morta.usarankedbystate;
+	by descending ChangeinmortalitryRate1980_2014 location;
+run;
+
+proc sgplot data=morta.usarankedbystate;
+	vline category / response=ChangeinmortalitryRate1980_2014;
+	vline category / response=Mortality_Rate__1980_;
+	vline category / response=mortality_rate__2014_;
+run;
+
+proc sort data=morta.usamortalityrates out=morta.causesranker;
+	by category;
+run;
+
+proc print data=morta.statesrankedbystate (obs=10);
+run;
+
+proc freq data=morta.usamortalityrates;
+	by category;
+run;
+
+proc means data=morta.usamortalityrates mean max maxdec=2;
+	var ChangeinmortalitryRate1980_2014;
+	class category;
+	output out=morta.rankedmorta2 mean=highmortality;
+	ways 1;
+run;
+
+proc means data=morta.usamortalityrates2 mean max maxdec=2;
+	var ChangeinmortalitryRate1980_2014;
+	class state;
+	output out=morta.rankedmorta3 mean=highmortality;
+	ways 1;
+run;
+
+proc sort data=morta.rankedmorta2 out=morta.highmortalityrates;
+	by descending highmortality;
+run;
+
+proc sort data=morta.rankedmorta3 out=morta.highmortalityrates2;
+	by descending highmortality;
+run;
+
+proc print data=morta.highmortalityrates (obs=10);
+run;
+
+proc print data=morta.highmortalityrates2 (obs=10);
+run;
+
+proc sgplot data=morta.highmortalityrates;
+	vline category / response=ChangeinmortalitryRate1980_2014;
+run;
+
+proc sgplot data=morta.highmortalityrates2;
+	vline state / response=highmortality;
+run;
+
+proc sgplot data=morta.highmortalityrates;
+	vbar category / response=highmortality;
+run;
+
+proc npar1way data=morta.statesmortalityrates wilcoxon;
+	class category;
+	var ChangeinmortalitryRate1980_2014;
+run;
+
+proc rank data=morta.statesmortalityrates out=morta.stateranked;
+	var ChangeinmortalitryRate1980_2014;
+run;
+
+proc print data=morta.stateranked;
+run;
+
+proc npar1way data=morta.statesmortalityrates wilcoxon;
+	class state;
+	var ChangeinmortalitryRate1980_2014;
+run;
+
+ods graphics on / width=11in;
+ods listing style=analysis;
+
+proc sgplot data=morta.statesmortalityrates;
+	series x=state y=ChangeinmortalitryRate1980_2014 / group=category markers;
+	refline 1 / axis=x;
+	keylegend / position=topright across=1ocation=inside;
+	xaxis grid;
+	yaxis grid;
+run;
+
+ods graphics off;
+ods graphics on / width=11in;
+
+proc sgplot data=morta.statesmortalityrates;
+	scatter x=state y=ChangeinmortalitryRate1980_2014 / name="s" group=category;
+	ellipse x=state y=ChangeinmortalitryRate1980_2014 / type=predicted alpha=.2 
+		name="p80" legendlabel="80%" lineattrs=graphconfidence;
+	ellipse x=state y=ChangeinmortalitryRate1980_2014 / type=predicted alpha=.05 
+		name="p95" legendlabel="95%" lineattrs=graphconfidence2;
+	polygon X=state Y=ChangeinmortalitryRate1980_2014 ID=category / fill 
+		fillattrs=(color=blue transparency=0.75) label=state labelloc=outsidebbox 
+		labelpos=ymax;
+run;
+
+ods graphics off;
+
+data morta.mentaldisorder;
+	set morta.statesmortalityrates;
+	where category='Mental and substance use';
+run;
+
+proc sort data=morta.mentaldisorder out=morta.sortedmental;
+	by descending ChangeinmortalitryRate1980_2014;
+run;
+
+ods graphics on / width=11in;
+
+proc sgplot data=morta.sortedmental;
+	vline state / response=ChangeinmortalitryRate1980_2014;
+	vline state / response=Mortality_Rate__1980_;
+	vline state / response=mortality_rate__2014_;
+run;
+
+quit;
+ods graphics off;
+ods graphics on / width=11in;
+
+proc sgplot data=morta.sortedmental;
+	vline state / response=ChangeinmortalitryRate1980_2014 stat=mean markers;
+run;
+
+quit;
+ods graphics off;
+
+data US;
+	set maps.US;
+	by State Segment;
+
+	if first.Segment then
+		PolyID+1;
+
+	/* create ID variable for polygons */
+run;
+
+ods graphics / antialiasmax=1500 labelmax=1500;
+
+/* enable anti-aliasing and labels */
+title "Outline of 48 US States";
+
+proc sgplot data=US;
+	polygon x=x y=y ID=PolyID / fill outline;
+run;
+
+data All;
+	set maps.uscity(where=(statecode NOT IN ("AK" "HI" "PR") ) US;
+run;
+
+title "US States with Some Large Cities";
+
+proc sgplot data=All noautolegend;
+	polygon x=x y=y ID=PolyID / fill outline transparency=0.75 group=StateCode;
+	scatter x=cityX y=cityY / datalabel=city;
+	xaxis display=none;
+	yaxis display=none;
+run;
+
+proc sort data=mapsgfk.us out=USBorders equals;
+	by statecode;
+run;
+
+proc sort data=sashelp.us_data(keep=density_2010 statecode) out=USDensity;
+	by statecode;
+run;
+
+data USDensity;
+	merge USBorders USDensity;
+	by statecode;
+
+	if statecode ne 'DC';
+run;
